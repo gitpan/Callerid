@@ -1,6 +1,6 @@
 package Callerid;
 
-use 5.008004;
+use 5.006001;
 use strict;
 use warnings;
 use Carp;
@@ -22,9 +22,7 @@ our @EXPORT = qw(
 	
 );
 
-our $VERSION = '0.03';
-
-#
+our $VERSION = '0.04';
 
 =pod
 
@@ -52,43 +50,53 @@ Callerid - Perl extension for interpreting raw caller ID information (a la AT#CI
 
 =head1 DESCRIPTION
 
-The Callerid module aims to provide a quick and easy method (YMMV) of decoding raw caller ID information as supplied by a modem.
+The Callerid module aims to provide a quick and easy method (YMMV) of decoding 
+raw caller ID information as supplied by a modem.
 
-This module does not talk to modems. It also does not mangle input. If you don't supply a hex string of the right format then you lose.
+This module does not talk to modems. It also does not mangle input. If you 
+don't supply a hex string of the right format then you lose.
 
 =head2 Methods
 
-=head3 C<< Callerid->new() >>
+=head3 C<< $cid = Callerid->new() >>
 
-=head3 C<< Callerid->new($string_of_hex) >>
+=head3 C<< $cid = Callerid->new($string_of_hex) >>
 
 =over 4
 
-Returns a newly created C<< Callerid >> object. If you supply it with a hex string then (assuming it's not malformed) it will populate data fields in the new C<< Callerid >> object appropriately.
+Returns a newly created C<< Callerid >> object. If you supply it with a hex 
+string then (assuming it's not malformed) it will populate data fields in the 
+new C<< Callerid >> object appropriately.
 
-Currently the (public) fields provided are C<< qw(name number hour minute month day) >>.
+Currently the (public) fields provided are: name number hour minute month day.
 
 =back
 
-=head3 C<< $Callerid->parse_raw_cid_string($string_of_hex) >>
+=head3 C<< $cid->parse_raw_cid_string($string_of_hex) >>
 
 =head3 C<< %info = Callerid::parse_raw_cid_string($string_of_hex) >>
 
 =over 4
 
-When called as an object method C<< parse_raw_cid_string() >> will fill the objects data fields with appropriate information. When called as a class method C<< parse_raw_cid_string() >> will return a hash with the same data fields.
+When called as an object method C<< parse_raw_cid_string() >> will fill the 
+objects data fields with appropriate information. When called as a class method
+C<< parse_raw_cid_string() >> will return a hash with the same data fields.
 
 =back
 
-=head3 C<< $Callerid->format_phone_number() >>
+=head3 C<< $pretty_number = $cid->format_phone_number() >>
 
-=head3 C<< Callerid::format_phone_number($number) >>
+=head3 C<< $pretty_number = Callerid::format_phone_number($number) >>
 
 =over 4
 
-When called as an object method, C<< format_phone_number() >> will return the object's number field formatted pretty. When called as a class method, C<< format_phone_number() >> will take a single argument and will do the same thing.
+When called as an object method, C<< format_phone_number() >> will return the 
+object's number field formatted pretty. When called as a class method, 
+C<< format_phone_number() >> will take a single argument and will do the same 
+thing.
 
-"Formatted pretty" means 7-digit phone numbers become ###-####, 10-digit numbers become ###-###-#### and everything else is passed through unchanged.
+"Formatted pretty" means 7-digit phone numbers become ###-####, 10-digit numbers
+become ###-###-####, 11-digit numbers become #-###-###-#### and everything else is passed through unchanged.
 
 =back
 
@@ -96,9 +104,40 @@ When called as an object method, C<< format_phone_number() >> will return the ob
 
 None by default.
 
+=head1 SAMPLE CODE
+
+ use Callerid;
+
+ # read in a list of raw caller ID codes
+ while(<>) {
+ 	chomp;
+ 	s/#.*$//; # remove comments
+ 	s/^\s*//; # remove leading spaces
+ 	s/\s*$//; # remove trailing spaces
+ 	next unless $_; # skip if there's nothing left
+
+ 	my($cid);
+ 	eval {
+ 		$cid = new Callerid($_);
+ 	};
+
+ 	if($@) {
+ 		warn "error parsing $_: $@";
+ 	} else {
+ 		printf "%s parses to name=%s number=%s date=%02d/%02d time=%02d:%02d\n",
+ 			$_,
+ 			$cid->{name},
+ 			$cid->format_phone_number(),
+ 			$cid->{month},
+ 			$cid->{day},
+ 			$cid->{hour},
+ 			$cid->{minute};
+ 	}
+ }
+
 =head1 SEE ALSO
 
-L<Device::Modem> to do I/O with a modem
+L<Device::Modem> to do I/O with a modem.
 
 Modem command set for putting modem into caller ID mode
 
@@ -182,50 +221,6 @@ sub parse_raw_cid_string(;$$) {
 	my(@c) = split //, $c;                    # break each character of the line into the array @c
 #	die "nope" unless ($#c == 77);
 
-# Data from modem starts at 8024...; I've noted times beside the data set and a ruler above:
-#
-# Call  1 - "KLAVA MARY", 		563-3973
-# Call  2 - "KLAVA MARY", 		563-3973
-# Call  3 - "Brit Columbia", 		961-9279
-# Call  4 - "MOEN BRANDON",		612-0539
-# Call  5 - "STAFFORD BLAINE",		561-0702
-# Call  6 - "STAFFORD BLAINE",		561-0702
-# Call  7 - "MOEN BRANDON",		612-0539
-# Call  8 - "STUDNEY S",		964-8390
-# Call  9 - "STEWART L M",		563-6930
-#
-#                                0         1         2         3         4         5         6         7      7 
-#                                012345678901234567890123456789012345678901234567890123456789012345678901234567
-#                                |         |         |         |         |         |         |         |      |
-# Call  1 - Aug  7 18:37 2004 => 802401083038303731383337070F4B4C415641204D4152592020202020030735363333393733B5
-# Call  2 - Aug  7 19:06 2004 => 802401083038303731393036070F4B4C415641204D4152592020202020030735363333393733B8
-# Call  3 - Aug  8 12:45 2004 => 802401083038303831323435070F4B4C415641204D4152592020202020030735363333393733BB
-# Call  4 - Aug  8 14:22 2004 => 802401083038303831343232070F4B4C415641204D4152592020202020030735363333393733BE
-# Call  5 - Aug 11 13:24 2004 => 802401083038313131333234070F4272697420436F6C756D626961202003073936313932373907
-# Call  6 - Aug 11 18:14 2004 => 802401083038313131383134070F4D4F454E204252414E444F4E2020200307363132303533397E
-# Call  7 - Aug 11 19:10 2004 => 802401083038313131393130070F53544146464F524420424C41494E4503073536313037303215
-# Call  8 - Aug 11 19:30 2004 => 802401083038313131393330070F53544146464F524420424C41494E4503073536313037303213
-# Call  9 - Aug 11 19:42 2004 => 802401083038313131393432070F4D4F454E204252414E444F4E2020200307363132303533397C
-# Call 10 - Aug 11 19:45 2004 => 802401083038313131393435070F535455444E45592053202020202020030739363438333930C0
-# Call 11 - Aug 11 19:46 2004 => 802401083038313131393436070F53544557415254204C204D20202020030735363336393330A2
-#                                         N n D d H h M m                                                     
-#                                                            ______________________________                   
-#                                                                                               # # # # # # # 
-#
-# local call has 78 characters in it:
-# Nn        = month digits
-# Dd        = day digits
-# Hh        = hour digits
-# Mm        = minute digits
-# __        = string encoded into hexadecimal using hex(); every two characters turn into one letter
-# ##        = phone number digits
-#
-# 3 appears to be used as a generic seperator digit
-# I believe the starting sequence of digits (@c[0 .. 8]) indicates that it's a local call
-# I believe (@c[24 .. 27]) is just padding
-# I believe (@c[68 .. 62]) is just padding
-# I hope that (@c[76 .. 77]) is a checksum, otherwise it's padding
-# 
 	my($month, $day, $hour, $minute, $name, $number);
 	$month    = (sprintf "%d", $c[9]  . $c[11]) if($#c > 11);
 	$day      = (sprintf "%d", $c[13] . $c[15]) if($#c > 15);
@@ -256,7 +251,7 @@ sub parse_raw_cid_string(;$$) {
 			$number = "";
 		} else {
 			for my $n qw(11 7) {
-				if($c =~ m/^.*((3\d){$n})/) {
+				if($c =~ m/((3\d){$n})..$/) {
 					my($three_coded) = $1;
 					my(@three_coded) = split //, $three_coded;
 					my($toggle) = 1;
@@ -302,26 +297,16 @@ sub format_phone_number(;$$) {
 		$number = $_arg;
 	}
 
-	# this all might become a regex someday... let's try substr() first
-	if(length($number) == 7) {
-		return( 
-			substr($number, 0, 3) . 
-			'-' . 
-			substr($number, 3, 4) 
-		);
-	} elsif(length($number) == 11) {
-		return( 
-			substr($number, 0, 1) . 
-			'-' . 
-			substr($number, 1, 3) .
-			'-' .
-			substr($number, 4, 3) .
-			'-' .
-			substr($number, 7, 4)
-		);
+	if($number =~ /^(\d{3})(\d{4})$/) {
+		return qq($1-$2);
+	} elsif($number =~ /^(\d{3})(\d{3})(\d{4})$/) {
+		return qq($1-$2-$3);
+	} elsif($number =~ /^(1)(\d{3})(\d{3})(\d{4})$/) {
+		return qq($1-$2-$3-$4);
 	} else {
 		return $number;
 	}
+
 }
 
 1;
